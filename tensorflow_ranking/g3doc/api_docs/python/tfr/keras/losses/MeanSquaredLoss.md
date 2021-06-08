@@ -1,4 +1,4 @@
-description: For mean squared error loss.
+description: Computes mean squared loss between y_true and y_pred.
 
 <div itemscope itemtype="http://developers.google.com/ReferenceObject">
 <meta itemprop="name" content="tfr.keras.losses.MeanSquaredLoss" />
@@ -15,22 +15,57 @@ description: For mean squared error loss.
 
 <table class="tfo-notebook-buttons tfo-api nocontent" align="left">
 <td>
-  <a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/losses.py#L477-L483">
+  <a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/losses.py#L1074-L1122">
     <img src="https://www.tensorflow.org/images/GitHub-Mark-32px.png" />
     View source on GitHub
   </a>
 </td>
 </table>
 
-For mean squared error loss.
+Computes mean squared loss between `y_true` and `y_pred`.
 
 <pre class="devsite-click-to-copy prettyprint lang-py tfo-signature-link">
 <code>tfr.keras.losses.MeanSquaredLoss(
-    reduction=tf.losses.Reduction.AUTO, name=None
+    reduction=tf.losses.Reduction.AUTO, name=None, ragged=False
 )
 </code></pre>
 
 <!-- Placeholder for "Used in" -->
+
+```
+loss = (y_true - y_pred)^2
+```
+
+#### Standalone usage:
+
+```
+>>> y_true = [[1., 0.]]
+>>> y_pred = [[0.6, 0.8]]
+>>> loss = tfr.keras.losses.MeanSquaredLoss()
+>>> loss(y_true, y_pred).numpy()
+0.4
+```
+
+```
+>>> # Using ragged tensors
+>>> y_true = tf.ragged.constant([[1., 0.], [0., 1., 0.]])
+>>> y_pred = tf.ragged.constant([[0.6, 0.8], [0.5, 0.8, 0.4]])
+>>> loss = tfr.keras.losses.MeanSquaredLoss(ragged=True)
+>>> loss(y_true, y_pred).numpy()
+0.20833336
+```
+
+Usage with the `compile()` API:
+
+```python
+model.compile(optimizer='sgd', loss=tfr.keras.losses.MeanSquaredLoss())
+```
+
+#### Definition:
+
+$$
+\mathcal{L}(\{y\}, \{s\}) = \sum_i (y_i - s_i)^{2}
+$$
 
 <!-- Tabular view -->
  <table class="responsive fixed orange">
@@ -42,21 +77,23 @@ For mean squared error loss.
 `reduction`
 </td>
 <td>
-(Optional) Type of `tf.keras.losses.Reduction` to apply to
-loss. Default value is `AUTO`. `AUTO` indicates that the reduction
-option will be determined by the usage context. For almost all cases
-this defaults to `SUM_OVER_BATCH_SIZE`. When used with
-`tf.distribute.Strategy`, outside of built-in training loops such as
-`tf.keras` `compile` and `fit`, using `AUTO` or `SUM_OVER_BATCH_SIZE`
-will raise an error. Please see this custom training [tutorial](https://www.tensorflow.org/tutorials/distribute/custom_training) for
-more details.
+(Optional) The `tf.keras.losses.Reduction` to use (see
+`tf.keras.losses.Loss`).
 </td>
 </tr><tr>
 <td>
 `name`
 </td>
 <td>
-Optional name for the op.
+(Optional) The name for the op.
+</td>
+</tr><tr>
+<td>
+`ragged`
+</td>
+<td>
+(Optional) If True, this loss will accept ragged tensors. If
+False, this loss will accept dense tensors.
 </td>
 </tr>
 </table>
@@ -103,6 +140,9 @@ A `Loss` instance.
 
 <h3 id="get_config"><code>get_config</code></h3>
 
+<a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/losses.py#L186-L191">View
+source</a>
+
 <pre class="devsite-click-to-copy prettyprint lang-py tfo-signature-link">
 <code>get_config()
 </code></pre>
@@ -111,7 +151,7 @@ Returns the config dictionary for a `Loss` instance.
 
 <h3 id="__call__"><code>__call__</code></h3>
 
-<a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/losses.py#L168-L173">View
+<a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/losses.py#L172-L177">View
 source</a>
 
 <pre class="devsite-click-to-copy prettyprint lang-py tfo-signature-link">

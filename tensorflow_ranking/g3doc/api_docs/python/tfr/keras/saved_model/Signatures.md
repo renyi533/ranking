@@ -5,6 +5,7 @@ description: Defines signatures to support regress and predict serving.
 <meta itemprop="path" content="Stable" />
 <meta itemprop="property" content="__call__"/>
 <meta itemprop="property" content="__init__"/>
+<meta itemprop="property" content="normalize_outputs"/>
 <meta itemprop="property" content="predict_tf_function"/>
 <meta itemprop="property" content="regress_tf_function"/>
 <meta itemprop="property" content="with_name_scope"/>
@@ -16,7 +17,7 @@ description: Defines signatures to support regress and predict serving.
 
 <table class="tfo-notebook-buttons tfo-api nocontent" align="left">
 <td>
-  <a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/saved_model.py#L35-L130">
+  <a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/saved_model.py#L11-L162">
     <img src="https://www.tensorflow.org/images/GitHub-Mark-32px.png" />
     View source on GitHub
   </a>
@@ -35,8 +36,40 @@ Defines signatures to support regress and predict serving.
 </code></pre>
 
 <!-- Placeholder for "Used in" -->
-<!-- Tabular view -->
 
+This wraps the trained Keras model in two serving functions that can be saved
+with `tf.saved_model.save` or `model.save`, and loaded with corresponding
+signature names. The regress serving signature takes a batch of serialized
+`tf.Example`s as input, whereas the predict serving signature takes a batch of
+serialized `ExampleListWithContext` as input.
+
+#### Example usage:
+
+A ranking model can be saved with signatures as follows:
+
+```python
+tf.saved_model.save(model, path, signatures=Signatures(model, ...)())
+```
+
+For regress serving, scores can be generated using `REGRESS` signature as
+follows:
+
+```python
+loaded_model = tf.saved_model.load(path)
+predictor = loaded_model.signatures[tf.saved_model.REGRESS_METHOD_NAME]
+scores = predictor(serialized_examples)[tf.saved_model.REGRESS_OUTPUTS]
+```
+
+For predict serving, scores can be generated using `PREDICT` signature as
+follows:
+
+```python
+loaded_model = tf.saved_model.load(path)
+predictor = loaded_model.signatures[tf.saved_model.PREDICT_METHOD_NAME]
+scores = predictor(serialized_elwcs)[tf.saved_model.PREDICT_OUTPUTS]
+```
+
+<!-- Tabular view -->
  <table class="responsive fixed orange">
 <colgroup><col width="214px"><col></colgroup>
 <tr><th colspan="2"><h2 class="add-link">Args</h2></th></tr>
@@ -46,7 +79,7 @@ Defines signatures to support regress and predict serving.
 `model`
 </td>
 <td>
-A keras ranking model.
+A Keras ranking model.
 </td>
 </tr><tr>
 <td>
@@ -77,7 +110,6 @@ A keras ranking model.
 </table>
 
 <!-- Tabular view -->
-
  <table class="responsive fixed orange">
 <colgroup><col width="214px"><col></colgroup>
 <tr><th colspan="2"><h2 class="add-link">Attributes</h2></th></tr>
@@ -131,9 +163,69 @@ of calling this method if you don't expect the return value to change.
 
 ## Methods
 
+<h3 id="normalize_outputs"><code>normalize_outputs</code></h3>
+
+<a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/saved_model.py#L71-L92">View
+source</a>
+
+<pre class="devsite-click-to-copy prettyprint lang-py tfo-signature-link">
+<code>normalize_outputs(
+    default_key: str,
+    outputs: Union[tf.Tensor, Dict[str, tf.Tensor]]
+) -> Dict[str, tf.Tensor]
+</code></pre>
+
+Returns a dict of Tensors for outputs.
+
+<!-- Tabular view -->
+ <table class="responsive fixed orange">
+<colgroup><col width="214px"><col></colgroup>
+<tr><th colspan="2">Args</th></tr>
+
+<tr>
+<td>
+`default_key`
+</td>
+<td>
+If outputs is a Tensor, use the default_key to make a dict.
+</td>
+</tr><tr>
+<td>
+`outputs`
+</td>
+<td>
+outputs to be normalized.
+</td>
+</tr>
+</table>
+
+<!-- Tabular view -->
+ <table class="responsive fixed orange">
+<colgroup><col width="214px"><col></colgroup>
+<tr><th colspan="2">Returns</th></tr>
+<tr class="alt">
+<td colspan="2">
+A dict maps from str-like key(s) to Tensor(s).
+</td>
+</tr>
+
+</table>
+
+<!-- Tabular view -->
+ <table class="responsive fixed orange">
+<colgroup><col width="214px"><col></colgroup>
+<tr><th colspan="2">Raises</th></tr>
+<tr class="alt">
+<td colspan="2">
+TypeError if outputs is not a Tensor nor a dict.
+</td>
+</tr>
+
+</table>
+
 <h3 id="predict_tf_function"><code>predict_tf_function</code></h3>
 
-<a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/saved_model.py#L62-L79">View
+<a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/saved_model.py#L94-L111">View
 source</a>
 
 <pre class="devsite-click-to-copy prettyprint lang-py tfo-signature-link">
@@ -144,7 +236,7 @@ Makes a tensorflow function for `predict`.
 
 <h3 id="regress_tf_function"><code>regress_tf_function</code></h3>
 
-<a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/saved_model.py#L81-L100">View
+<a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/saved_model.py#L113-L132">View
 source</a>
 
 <pre class="devsite-click-to-copy prettyprint lang-py tfo-signature-link">
@@ -186,7 +278,6 @@ numpy=..., dtype=float32)>
 ```
 
 <!-- Tabular view -->
-
  <table class="responsive fixed orange">
 <colgroup><col width="214px"><col></colgroup>
 <tr><th colspan="2">Args</th></tr>
@@ -202,7 +293,6 @@ The method to wrap.
 </table>
 
 <!-- Tabular view -->
-
  <table class="responsive fixed orange">
 <colgroup><col width="214px"><col></colgroup>
 <tr><th colspan="2">Returns</th></tr>
@@ -216,7 +306,7 @@ The original method wrapped such that it enters the module's name scope.
 
 <h3 id="__call__"><code>__call__</code></h3>
 
-<a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/saved_model.py#L102-L130">View
+<a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/saved_model.py#L134-L162">View
 source</a>
 
 <pre class="devsite-click-to-copy prettyprint lang-py tfo-signature-link">
@@ -228,7 +318,6 @@ source</a>
 Returns a dict of signatures.
 
 <!-- Tabular view -->
-
  <table class="responsive fixed orange">
 <colgroup><col width="214px"><col></colgroup>
 <tr><th colspan="2">Args</th></tr>
@@ -245,7 +334,6 @@ signature.
 </table>
 
 <!-- Tabular view -->
-
  <table class="responsive fixed orange">
 <colgroup><col width="214px"><col></colgroup>
 <tr><th colspan="2">Returns</th></tr>

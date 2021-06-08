@@ -13,7 +13,15 @@
 # limitations under the License.
 
 # Lint as: python3
-"""Keras metrics in TF-Ranking."""
+"""Keras metrics in TF-Ranking.
+
+NOTE: For metrics that compute a ranking, ties are broken randomly. This means
+that metrics may be stochastic if items with equal scores are provided.
+
+WARNING: Some metrics (e.g. Recall or MRR) are not well-defined when there are
+no relevant items (e.g. if `y_true` has a row of only zeroes). For these cases,
+the TF-Ranking metrics will evaluate to `0`.
+"""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -117,23 +125,27 @@ def get(key: str,
   return metric_obj
 
 
-def default_keras_metrics() -> List[tf.keras.metrics.Metric]:
+def default_keras_metrics(**kwargs) -> List[tf.keras.metrics.Metric]:
   """Returns a list of ranking metrics.
+
+  Args:
+    **kwargs: Additional kwargs to pass to each keras metric.
 
   Returns:
     A list of metrics of type `tf.keras.metrics.Metric`.
   """
   list_kwargs = [
-      dict(key="ndcg", topn=topn, name="metric/ndcg_{}".format(topn))
+      dict(key="ndcg", topn=topn, name="metric/ndcg_{}".format(topn), **kwargs)
       for topn in [1, 3, 5, 10]
   ] + [
-      dict(key="arp", name="metric/arp"),
-      dict(key="ordered_pair_accuracy", name="metric/ordered_pair_accuracy"),
-      dict(key="mrr", name="metric/mrr"),
-      dict(key="precision", name="metric/precision"),
-      dict(key="map", name="metric/map"),
-      dict(key="dcg", name="metric/dcg"),
-      dict(key="ndcg", name="metric/ndcg")
+      dict(key="arp", name="metric/arp", **kwargs),
+      dict(key="ordered_pair_accuracy", name="metric/ordered_pair_accuracy",
+           **kwargs),
+      dict(key="mrr", name="metric/mrr", **kwargs),
+      dict(key="precision", name="metric/precision", **kwargs),
+      dict(key="map", name="metric/map", **kwargs),
+      dict(key="dcg", name="metric/dcg", **kwargs),
+      dict(key="ndcg", name="metric/ndcg", **kwargs)
   ]
   return [get(**kwargs) for kwargs in list_kwargs]
 
@@ -179,7 +191,54 @@ class _RankingMetric(tf.keras.metrics.Mean):
 
 @tf.keras.utils.register_keras_serializable(package="tensorflow_ranking")
 class MRRMetric(_RankingMetric):
-  """Implements mean reciprocal rank (MRR)."""
+  r"""Mean reciprocal rank (MRR).
+
+  For each list of scores `s` in `y_pred` and list of labels `y` in `y_true`:
+
+  ```
+  MRR(y, s) = max_i y_i / rank(s_i)
+  ```
+
+  NOTE: This metric converts graded relevance to binary relevance by setting
+  `y_i = 1` if `y_i >= 1`.
+
+  Standalone usage:
+
+  >>> y_true = [[0., 1., 1.]]
+  >>> y_pred = [[3., 1., 2.]]
+  >>> mrr = tfr.keras.metrics.MRRMetric()
+  >>> mrr(y_true, y_pred).numpy()
+  0.5
+
+  >>> # Using ragged tensors
+  >>> y_true = tf.ragged.constant([[0., 1.], [1., 2., 0.]])
+  >>> y_pred = tf.ragged.constant([[2., 1.], [2., 5., 4.]])
+  >>> mrr = tfr.keras.metrics.MRRMetric(ragged=True)
+  >>> mrr(y_true, y_pred).numpy()
+  0.75
+
+  Usage with the `compile()` API:
+
+  ```python
+  model.compile(optimizer='sgd', metrics=[tfr.keras.metrics.MRRMetric()])
+  ```
+
+  Definition:
+
+  $$
+  \text{MRR}(\{y\}, \{s\}) = \max_i \frac{\bar{y}_i}{\text{rank}(s_i)}
+  $$
+
+  where $$\text{rank}(s_i)$$ is the rank of item $$i$$ after sorting by scores
+  $$s$$ with ties broken randomly and $$\bar{y_i}$$ are truncated labels:
+
+  $$
+  \bar{y}_i = \begin{cases}
+  1 & \text{if }y_i \geq 1 \\
+  0 & \text{else}
+  \end{cases}
+  $$
+  """
 
   def __init__(self, name=None, topn=None, dtype=None, ragged=False, **kwargs):
     super(MRRMetric, self).__init__(name=name, dtype=dtype, **kwargs)
@@ -196,7 +255,45 @@ class MRRMetric(_RankingMetric):
 
 @tf.keras.utils.register_keras_serializable(package="tensorflow_ranking")
 class ARPMetric(_RankingMetric):
-  """Implements average relevance position (ARP)."""
+  r"""Average relevance position (ARP).
+
+  For each list of scores `s` in `y_pred` and list of labels `y` in `y_true`:
+
+  ```
+  ARP(y, s) = sum_i (y_i * rank(s_i)) / sum_j y_j
+  ```
+
+  Standalone usage:
+
+  >>> y_true = [[0., 1., 1.]]
+  >>> y_pred = [[3., 1., 2.]]
+  >>> arp = tfr.keras.metrics.ARPMetric()
+  >>> arp(y_true, y_pred).numpy()
+  2.5
+
+  >>> # Using ragged tensors
+  >>> y_true = tf.ragged.constant([[0., 1.], [1., 2., 0.]])
+  >>> y_pred = tf.ragged.constant([[2., 1.], [2., 5., 4.]])
+  >>> arp = tfr.keras.metrics.ARPMetric(ragged=True)
+  >>> arp(y_true, y_pred).numpy()
+  1.75
+
+  Usage with the `compile()` API:
+
+  ```python
+  model.compile(optimizer='sgd', metrics=[tfr.keras.metrics.ARPMetric()])
+  ```
+
+  Definition:
+
+  $$
+  \text{ARP}(\{y\}, \{s\}) =
+  \frac{1}{\sum_i y_i} \sum_i y_i \cdot \text{rank}(s_i)
+  $$
+
+  where $$\text{rank}(s_i)$$ is the rank of item $$i$$ after sorting by scores
+  $$s$$ with ties broken randomly.
+  """
 
   def __init__(self, name=None, dtype=None, ragged=False, **kwargs):
     super(ARPMetric, self).__init__(name=name, dtype=dtype, **kwargs)
@@ -205,7 +302,63 @@ class ARPMetric(_RankingMetric):
 
 @tf.keras.utils.register_keras_serializable(package="tensorflow_ranking")
 class PrecisionMetric(_RankingMetric):
-  """Implements precision@k (P@k)."""
+  r"""Precision@k (P@k).
+
+  For each list of scores `s` in `y_pred` and list of labels `y` in `y_true`:
+
+  ```
+  P@K(y, s) = 1/k sum_i I[rank(s_i) < k] y_i
+  ```
+
+  NOTE: This metric converts graded relevance to binary relevance by setting
+  `y_i = 1` if `y_i >= 1`.
+
+  Standalone usage:
+
+  >>> y_true = [[0., 1., 1.]]
+  >>> y_pred = [[3., 1., 2.]]
+  >>> precision_at_2 = tfr.keras.metrics.PrecisionMetric(topn=2)
+  >>> precision_at_2(y_true, y_pred).numpy()
+  0.5
+
+  >>> # Using ragged tensors
+  >>> y_true = tf.ragged.constant([[0., 1.], [1., 2., 0.]])
+  >>> y_pred = tf.ragged.constant([[2., 1.], [2., 5., 4.]])
+  >>> precision_at_2 = tfr.keras.metrics.PrecisionMetric(topn=2, ragged=True)
+  >>> precision_at_2(y_true, y_pred).numpy()
+  0.5
+
+  Usage with the `compile()` API:
+
+  ```python
+  model.compile(optimizer='sgd', metrics=[tfr.keras.metrics.PrecisionMetric()])
+  ```
+
+  Definition:
+
+  $$
+  \text{P@k}(\{y\}, \{s\}) =
+  \frac{1}{k} \sum_i I[\text{rank}(s_i) \leq k] \bar{y}_i
+  $$
+
+  where:
+
+  * $$\text{rank}(s_i)$$ is the rank of item $$i$$ after sorting by scores $$s$$
+    with ties broken randomly
+  * $$I[]$$ is the indicator function:\
+    $$I[\text{cond}] = \begin{cases}
+    1 & \text{if cond is true}\\
+    0 & \text{else}\end{cases}
+    $$
+  * $$\bar{y}_i$$ are the truncated labels:\
+    $$
+    \bar{y}_i = \begin{cases}
+    1 & \text{if }y_i \geq 1 \\
+    0 & \text{else}
+    \end{cases}
+    $$
+  * $$k = |y|$$ if $$k$$ is not provided
+  """
 
   def __init__(self, name=None, topn=None, dtype=None, ragged=False, **kwargs):
     super(PrecisionMetric, self).__init__(name=name, dtype=dtype, **kwargs)
@@ -224,7 +377,63 @@ class PrecisionMetric(_RankingMetric):
 # TODO Add recall metrics to TF1 in another cl.
 @tf.keras.utils.register_keras_serializable(package="tensorflow_ranking")
 class RecallMetric(_RankingMetric):
-  """Implements recall@k."""
+  r"""Recall@k (R@k).
+
+  For each list of scores `s` in `y_pred` and list of labels `y` in `y_true`:
+
+  ```
+  R@K(y, s) = sum_i I[rank(s_i) < k] y_i / sum_j y_j
+  ```
+
+  NOTE: This metric converts graded relevance to binary relevance by setting
+  `y_i = 1` if `y_i >= 1`.
+
+  Standalone usage:
+
+  >>> y_true = [[0., 1., 1.]]
+  >>> y_pred = [[3., 1., 2.]]
+  >>> recall_at_2 = tfr.keras.metrics.RecallMetric(topn=2)
+  >>> recall_at_2(y_true, y_pred).numpy()
+  0.5
+
+  >>> # Using ragged tensors
+  >>> y_true = tf.ragged.constant([[0., 1.], [1., 2., 0.]])
+  >>> y_pred = tf.ragged.constant([[2., 1.], [2., 5., 4.]])
+  >>> recall_at_2 = tfr.keras.metrics.RecallMetric(topn=2, ragged=True)
+  >>> recall_at_2(y_true, y_pred).numpy()
+  0.75
+
+  Usage with the `compile()` API:
+
+  ```python
+  model.compile(optimizer='sgd', metrics=[tfr.keras.metrics.RecallMetric()])
+  ```
+
+  Definition:
+
+  $$
+  \text{R@k}(\{y\}, \{s\}) =
+  \frac{\sum_i I[\text{rank}(s_i) \leq k] \bar{y}_i}{\sum_j \bar{y}_j}
+  $$
+
+  where:
+
+  * $$\text{rank}(s_i)$$ is the rank of item $$i$$ after sorting by scores $$s$$
+    with ties broken randomly
+  * $$I[]$$ is the indicator function:\
+    $$I[\text{cond}] = \begin{cases}
+    1 & \text{if cond is true}\\
+    0 & \text{else}\end{cases}
+    $$
+  * $$\bar{y}_i$$ are the truncated labels:\
+    $$
+    \bar{y}_i = \begin{cases}
+    1 & \text{if }y_i \geq 1 \\
+    0 & \text{else}
+    \end{cases}
+    $$
+  * $$k = |y|$$ if $$k$$ is not provided
+  """
 
   def __init__(self, name=None, topn=None, dtype=None, ragged=False, **kwargs):
     super(RecallMetric, self).__init__(name=name, dtype=dtype, **kwargs)
@@ -242,7 +451,67 @@ class RecallMetric(_RankingMetric):
 
 @tf.keras.utils.register_keras_serializable(package="tensorflow_ranking")
 class PrecisionIAMetric(_RankingMetric):
-  """Implements PrecisionIA@k (Pre-IA@k)."""
+  r"""Precision-IA@k (Pre-IA@k).
+
+  Intent-aware Precision@k ([Agrawal et al, 2009][agrawal2009];
+  [Clarke et al, 2009][clarke2009]) is a precision metric that operates on
+  subtopics and is typically used for diversification tasks..
+
+  For each list of scores `s` in `y_pred` and list of labels `y` in `y_true`:
+
+  ```
+  Pre-IA@k(y, s) = sum_t sum_i I[rank(s_i) <= k] y_{i,t} / (# of subtopics * k)
+  ```
+
+  NOTE: The labels `y_true` should be of shape
+  `[batch_size, list_size, subtopic_size]`, indicating relevance for each
+  subtopic in the last dimension.
+
+  NOTE: This metric converts graded relevance to binary relevance by setting
+  `y_{i,t} = 1` if `y_{i,t} >= 1`.
+
+  Standalone usage:
+
+  >>> y_true = [[[0., 1.], [1., 0.], [1., 1.]]]
+  >>> y_pred = [[3., 1., 2.]]
+  >>> pre_ia = tfr.keras.metrics.PrecisionIAMetric()
+  >>> pre_ia(y_true, y_pred).numpy()
+  0.6666667
+
+  >>> # Using ragged tensors
+  >>> y_true = tf.ragged.constant(
+  ...   [[[0., 0.], [1., 0.]], [[1., 1.], [0., 2.], [1., 0.]]])
+  >>> y_pred = tf.ragged.constant([[2., 1.], [2., 5., 4.]])
+  >>> pre_ia = tfr.keras.metrics.PrecisionIAMetric(ragged=True)
+  >>> pre_ia(y_true, y_pred).numpy()
+  0.5833334
+
+  Usage with the `compile()` API:
+
+  ```python
+  model.compile(optimizer='sgd',
+                metrics=[tfr.keras.metrics.PrecisionIAMetric()])
+  ```
+
+  Definition:
+
+  $$
+  \text{Pre-IA@k}(y, s) = \frac{1}{\text{# of subtopics} \cdot k}
+  \sum_t \sum_i I[\text{rank}(s_i) \leq k] y_{i,t}
+  $$
+
+  where $$\text{rank}(s_i)$$ is the rank of item $$i$$ after sorting by scores
+  $$s$$ with ties broken randomly.
+
+  References:
+
+    - [Diversifying Search Results, Agrawal et al, 2009][agrawal2009]
+    - [Overview of the TREC 2009 Web Track, Clarke et al, 2009][clarke2009]
+
+  [agrawal2009]:
+  https://www.microsoft.com/en-us/research/publication/diversifying-search-results/
+  [clarke2009]: https://trec.nist.gov/pubs/trec18/papers/ENT09.OVERVIEW.pdf
+  """
 
   def __init__(self,
                name=None,
@@ -250,6 +519,17 @@ class PrecisionIAMetric(_RankingMetric):
                dtype=None,
                ragged=False,
                **kwargs):
+    """Constructor.
+
+    Args:
+      name: A string used as the name for this metric.
+      topn: A cutoff for how many examples to consider for this metric.
+      dtype: Data type of the metric output. See `tf.keras.metrics.Metric`.
+      ragged: A bool indicating whether the supplied tensors are ragged. If
+        True y_true, y_pred and sample_weight (if providing per-example weights)
+        need to be ragged tensors with compatible shapes.
+      **kwargs: Other keyward arguments used in `tf.keras.metrics.Metric`.
+    """
     super(PrecisionIAMetric, self).__init__(name=name, dtype=dtype, **kwargs)
     self._topn = topn
     self._metric = metrics_impl.PrecisionIAMetric(name=name, topn=topn,
@@ -265,7 +545,68 @@ class PrecisionIAMetric(_RankingMetric):
 
 @tf.keras.utils.register_keras_serializable(package="tensorflow_ranking")
 class MeanAveragePrecisionMetric(_RankingMetric):
-  """Implements mean average precision (MAP)."""
+  r"""Mean average precision (MAP).
+
+  For each list of scores `s` in `y_pred` and list of labels `y` in `y_true`:
+
+  ```
+  MAP(y, s) = sum_k (P@k(y, s) * rel(k)) / sum_i y_i
+  rel(k) = y_i if rank(s_i) = k
+  ```
+
+  NOTE: This metric converts graded relevance to binary relevance by setting
+  `y_i = 1` if `y_i >= 1`.
+
+  Standalone usage:
+
+  >>> y_true = [[0., 1., 1.]]
+  >>> y_pred = [[3., 1., 2.]]
+  >>> map_metric = tfr.keras.metrics.MeanAveragePrecisionMetric(topn=2)
+  >>> map_metric(y_true, y_pred).numpy()
+  0.25
+
+  >>> # Using ragged tensors
+  >>> y_true = tf.ragged.constant([[0., 1.], [1., 2., 0.]])
+  >>> y_pred = tf.ragged.constant([[2., 1.], [2., 5., 4.]])
+  >>> map_metric = tfr.keras.metrics.MeanAveragePrecisionMetric(
+  ...   topn=2, ragged=True)
+  >>> map_metric(y_true, y_pred).numpy()
+  0.5
+
+  Usage with the `compile()` API:
+
+  ```python
+  model.compile(optimizer='sgd',
+                metrics=[tfr.keras.metrics.MeanAveragePrecisionMetric()])
+  ```
+
+  Definition:
+
+  $$
+  \text{MAP}(\{y\}, \{s\}) =
+  \frac{\sum_k P@k(y, s) \cdot \text{rel}(k)}{\sum_j \bar{y}_j} \\
+  \text{rel}(k) = \max_i I[\text{rank}(s_i) = k] \bar{y}_i
+  $$
+
+  where:
+
+  * $$P@k(y, s)$$ is the Precision at rank $$k$$. See
+    `tfr.keras.metrics.PrecisionMetric`.
+  * $$\text{rank}(s_i)$$ is the rank of item $$i$$ after sorting by scores $$s$$
+    with ties broken randomly
+  * $$I[]$$ is the indicator function:\
+    $$I[\text{cond}] = \begin{cases}
+    1 & \text{if cond is true}\\
+    0 & \text{else}\end{cases}
+    $$
+  * $$\bar{y}_i$$ are the truncated labels:\
+    $$
+    \bar{y}_i = \begin{cases}
+    1 & \text{if }y_i \geq 1 \\
+    0 & \text{else}
+    \end{cases}
+    $$
+  """
 
   def __init__(self, name=None, topn=None, dtype=None, ragged=False, **kwargs):
     super(MeanAveragePrecisionMetric, self).__init__(
@@ -285,11 +626,61 @@ class MeanAveragePrecisionMetric(_RankingMetric):
 
 @tf.keras.utils.register_keras_serializable(package="tensorflow_ranking")
 class NDCGMetric(_RankingMetric):
-  """Implements normalized discounted cumulative gain (NDCG).
+  r"""Normalized discounted cumulative gain (NDCG).
 
-  The `gain_fn` and `rank_discount_fn` should be keras serializable. Please see
-  the `pow_minus_1` and `log2_inverse` above as examples when defining user
-  customized functions.
+  Normalized discounted cumulative gain ([Järvelin et al, 2002][jarvelin2002])
+  is the normalized version of `tfr.keras.metrics.DCGMetric`.
+
+  For each list of scores `s` in `y_pred` and list of labels `y` in `y_true`:
+
+  ```
+  NDCG(y, s) = DCG(y, s) / DCG(y, y)
+  DCG(y, s) = sum_i gain(y_i) * rank_discount(rank(s_i))
+  ```
+
+  NOTE: The `gain_fn` and `rank_discount_fn` should be keras serializable.
+  Please see `tfr.keras.utils.pow_minus_1` and `tfr.keras.utils.log2_inverse` as
+  examples when defining user customized functions.
+
+  Standalone usage:
+
+  >>> y_true = [[0., 1., 1.]]
+  >>> y_pred = [[3., 1., 2.]]
+  >>> ndcg = tfr.keras.metrics.NDCGMetric()
+  >>> ndcg(y_true, y_pred).numpy()
+  0.6934264
+
+  >>> # Using ragged tensors
+  >>> y_true = tf.ragged.constant([[0., 1.], [1., 2., 0.]])
+  >>> y_pred = tf.ragged.constant([[2., 1.], [2., 5., 4.]])
+  >>> ndcg = tfr.keras.metrics.NDCGMetric(ragged=True)
+  >>> ndcg(y_true, y_pred).numpy()
+  0.7974351
+
+  Usage with the `compile()` API:
+
+  ```python
+  model.compile(optimizer='sgd', metrics=[tfr.keras.metrics.NDCGMetric()])
+  ```
+
+  Definition:
+
+  $$
+  \text{NDCG}(\{y\}, \{s\}) =
+  \frac{\text{DCG}(\{y\}, \{s\})}{\text{DCG}(\{y\}, \{y\})} \\
+  \text{DCG}(\{y\}, \{s\}) =
+  \sum_i \text{gain}(y_i) \cdot \text{rank_discount}(\text{rank}(s_i))
+  $$
+
+  where $$\text{rank}(s_i)$$ is the rank of item $$i$$ after sorting by scores
+  $$s$$ with ties broken randomly.
+
+  References:
+
+    - [Cumulated gain-based evaluation of IR techniques, Järvelin et al,
+       2002][jarvelin2002]
+
+  [jarvelin2002]: https://dl.acm.org/doi/10.1145/582415.582418
   """
 
   def __init__(self,
@@ -324,11 +715,57 @@ class NDCGMetric(_RankingMetric):
 
 @tf.keras.utils.register_keras_serializable(package="tensorflow_ranking")
 class DCGMetric(_RankingMetric):
-  """Implements discounted cumulative gain (DCG).
+  r"""Discounted cumulative gain (DCG).
 
-  The `gain_fn` and `rank_discount_fn` should be keras serializable. Please see
-  the `pow_minus_1` and `log2_inverse` above as examples when defining user
-  customized functions.
+  Discounted cumulative gain ([Järvelin et al, 2002][jarvelin2002]).
+
+  For each list of scores `s` in `y_pred` and list of labels `y` in `y_true`:
+
+  ```
+  DCG(y, s) = sum_i gain(y_i) * rank_discount(rank(s_i))
+  ```
+
+  NOTE: The `gain_fn` and `rank_discount_fn` should be keras serializable.
+  Please see `tfr.keras.utils.pow_minus_1` and `tfr.keras.utils.log2_inverse` as
+  examples when defining user customized functions.
+
+  Standalone usage:
+
+  >>> y_true = [[0., 1., 1.]]
+  >>> y_pred = [[3., 1., 2.]]
+  >>> dcg = tfr.keras.metrics.DCGMetric()
+  >>> dcg(y_true, y_pred).numpy()
+  1.1309297
+
+  >>> # Using ragged tensors
+  >>> y_true = tf.ragged.constant([[0., 1.], [1., 2., 0.]])
+  >>> y_pred = tf.ragged.constant([[2., 1.], [2., 5., 4.]])
+  >>> dcg = tfr.keras.metrics.DCGMetric(ragged=True)
+  >>> dcg(y_true, y_pred).numpy()
+  2.065465
+
+  Usage with the `compile()` API:
+
+  ```python
+  model.compile(optimizer='sgd', metrics=[tfr.keras.metrics.DCGMetric()])
+  ```
+
+  Definition:
+
+  $$
+  \text{DCG}(\{y\}, \{s\}) =
+  \sum_i \text{gain}(y_i) \cdot \text{rank_discount}(\text{rank}(s_i))
+  $$
+
+  where $$\text{rank}(s_i)$$ is the rank of item $$i$$ after sorting by scores
+  $$s$$ with ties broken randomly.
+
+  References:
+
+    - [Cumulated gain-based evaluation of IR techniques, Järvelin et al,
+       2002][jarvelin2002]
+
+  [jarvelin2002]: https://dl.acm.org/doi/10.1145/582415.582418
   """
 
   def __init__(self,
@@ -363,10 +800,76 @@ class DCGMetric(_RankingMetric):
 
 @tf.keras.utils.register_keras_serializable(package="tensorflow_ranking")
 class AlphaDCGMetric(_RankingMetric):
-  """Implements alpha discounted cumulative gain (alphaDCG).
+  r"""Alpha discounted cumulative gain (alphaDCG).
 
-  The `rank_discount_fn` should be keras serializable. Please see the
-  `log2_inverse` above examples when defining user customized functions.
+  Alpha discounted cumulative gain ([Clarke et al, 2008][clarke2008];
+  [Clarke et al, 2009][clarke2009]) is a cumulative gain metric that operates
+  on subtopics and is typically used for diversification tasks.
+
+  For each list of scores `s` in `y_pred` and list of labels `y` in `y_true`:
+
+  ```
+  alphaDCG(y, s) = sum_t sum_i gain(y_{i,t}) * rank_discount(rank(s_i))
+  gain(y_{i,t}) = (1 - alpha)^(sum_j I[rank(s_j) < rank(s_i)] * gain(y_{j,t}))
+  ```
+
+  NOTE: The labels `y_true` should be of shape
+  `[batch_size, list_size, subtopic_size]`, indicating relevance for each
+  subtopic in the last dimension.
+
+  NOTE: The `rank_discount_fn` should be keras serializable. Please see
+  `tfr.keras.utils.log2_inverse` as an example when defining user customized
+  functions.
+
+  Standalone usage:
+
+  >>> y_true = [[[0., 1.], [1., 0.], [1., 1.]]]
+  >>> y_pred = [[3., 1., 2.]]
+  >>> alpha_dcg = tfr.keras.metrics.AlphaDCGMetric()
+  >>> alpha_dcg(y_true, y_pred).numpy()
+  2.1963947
+
+  >>> # Using ragged tensors
+  >>> y_true = tf.ragged.constant(
+  ...   [[[0., 0.], [1., 0.]], [[1., 1.], [0., 2.], [1., 0.]]])
+  >>> y_pred = tf.ragged.constant([[2., 1.], [2., 5., 4.]])
+  >>> alpha_dcg = tfr.keras.metrics.AlphaDCGMetric(ragged=True)
+  >>> alpha_dcg(y_true, y_pred).numpy()
+  1.8184297
+
+  Usage with the `compile()` API:
+
+  ```python
+  model.compile(optimizer='sgd', metrics=[tfr.keras.metrics.AlphaDCGMetric()])
+  ```
+
+  Definition:
+
+  $$
+  \alpha\text{DCG}(y, s) =
+  \sum_t \sum_i \text{gain}(y_{i, t}, \alpha)
+  \text{ rank_discount}(\text{rank}(s_i))\\
+  \text{gain}(y_{i, t}, \alpha) =
+  y_{i, t} (1 - \alpha)^{\sum_j I[\text{rank}(s_j) < \text{rank}(s_i)] y_{j, t}}
+  $$
+
+  where $$\text{rank}(s_i)$$ is the rank of item $$i$$ after sorting by scores
+  $$s$$ with ties broken randomly and $$I[]$$ is the indicator function:
+
+  $$
+  I[\text{cond}] = \begin{cases}
+  1 & \text{if cond is true}\\
+  0 & \text{else}\end{cases}
+  $$
+
+  References:
+
+    - [Novelty and diversity in information retrieval evaluation, Clarke et al,
+       2008][clarke2008]
+    - [Overview of the TREC 2009 Web Track, Clarke et al, 2009][clarke2009]
+
+  [clarke2008]: https://dl.acm.org/doi/10.1145/1390334.1390446
+  [clarke2009]: https://trec.nist.gov/pubs/trec18/papers/ENT09.OVERVIEW.pdf
   """
 
   def __init__(self,
@@ -386,8 +889,8 @@ class AlphaDCGMetric(_RankingMetric):
       alpha: A float between 0 and 1, parameter used in definition of alpha-DCG.
         Introduced as an assessor error in judging whether a document is
         covering a subtopic of the query.
-      rank_discount_fn: A function of rank discounts. Default is set to discount
-        = 1 / log2(rank+1). The `rank_discount_fn` should be keras serializable.
+      rank_discount_fn: A function of rank discounts. Default is set to
+        `1 / log2(rank+1)`. The `rank_discount_fn` should be keras serializable.
         Please see the `log2_inverse` above as an example when defining user
         customized functions.
       seed: The ops-level random seed used in shuffle ties in `sort_by_scores`.
@@ -423,7 +926,53 @@ class AlphaDCGMetric(_RankingMetric):
 
 @tf.keras.utils.register_keras_serializable(package="tensorflow_ranking")
 class OPAMetric(_RankingMetric):
-  """Implements ordered pair accuracy (OPA)."""
+  r"""Ordered pair accuracy (OPA).
+
+  For each list of scores `s` in `y_pred` and list of labels `y` in `y_true`:
+
+  ```
+  OPA(y, s) = sum_i sum_j I[s_i > s_j] I[y_i > y_j] / sum_i sum_j I[y_i > y_j]
+  ```
+
+  NOTE: Pairs with equal labels (`y_i = y_j`) are always ignored. Pairs with
+  equal scores (`s_i = s_j`) are considered incorrectly ordered.
+
+  Standalone usage:
+
+  >>> y_true = [[0., 1., 2.]]
+  >>> y_pred = [[3., 1., 2.]]
+  >>> opa = tfr.keras.metrics.OPAMetric()
+  >>> opa(y_true, y_pred).numpy()
+  0.33333334
+
+  >>> # Using ragged tensors
+  >>> y_true = tf.ragged.constant([[0., 1.], [1., 2., 0.]])
+  >>> y_pred = tf.ragged.constant([[2., 1.], [2., 5., 4.]])
+  >>> opa = tfr.keras.metrics.OPAMetric(ragged=True)
+  >>> opa(y_true, y_pred).numpy()
+  0.5
+
+  Usage with the `compile()` API:
+
+  ```python
+  model.compile(optimizer='sgd', metrics=[tfr.keras.metrics.OPAMetric()])
+  ```
+
+  Definition:
+
+  $$
+  \text{OPA}(\{y\}, \{s\}) =
+  \frac{\sum_i \sum_j I[s_i > s_j] I[y_i > y_j]}{\sum_i \sum_j I[y_i > y_j]}
+  $$
+
+  where $$I[]$$ is the indicator function:
+
+  $$
+  I[\text{cond}] = \begin{cases}
+  1 & \text{if cond is true}\\
+  0 & \text{else}\end{cases}
+  $$
+  """
 
   def __init__(self, name=None, dtype=None, ragged=False, **kwargs):
     super(OPAMetric, self).__init__(name=name, dtype=dtype, **kwargs)

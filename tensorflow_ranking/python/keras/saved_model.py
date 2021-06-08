@@ -22,32 +22,41 @@ import tensorflow as tf
 from tensorflow_ranking.python import data
 
 
-def _normalize_outputs(
-    default_key: str,
-    outputs: Union[tf.Tensor, Dict[str, tf.Tensor]]) -> Dict[str, tf.Tensor]:
-  """Returns a dict of Tensors for outputs.
-
-  Args:
-    default_key: If outputs is a Tensor, use the default_key to make a dict.
-    outputs: outputs to be normalized.
-
-  Returns:
-    A dict maps from str-like key(s) to Tensor(s).
-
-  Raises:
-    TypeError if outputs is not a Tensor nor a dict.
-  """
-  if isinstance(outputs, tf.Tensor):
-    return {default_key: outputs}
-  elif isinstance(outputs, dict):
-    return outputs
-  else:
-    raise TypeError(
-        "Model outputs need to be either a tensor or a dict of tensors.")
-
-
 class Signatures(tf.Module):
-  """Defines signatures to support regress and predict serving."""
+  """Defines signatures to support regress and predict serving.
+
+  This wraps the trained Keras model in two serving functions that can be saved
+  with `tf.saved_model.save` or `model.save`, and loaded with corresponding
+  signature names. The regress serving signature takes a batch of serialized
+  `tf.Example`s as input, whereas the predict serving signature takes a batch of
+  serialized `ExampleListWithContext` as input.
+
+  Example usage:
+
+  A ranking model can be saved with signatures as follows:
+
+  ```python
+  tf.saved_model.save(model, path, signatures=Signatures(model, ...)())
+  ```
+
+  For regress serving, scores can be generated using `REGRESS` signature as
+  follows:
+
+  ```python
+  loaded_model = tf.saved_model.load(path)
+  predictor = loaded_model.signatures[tf.saved_model.REGRESS_METHOD_NAME]
+  scores = predictor(serialized_examples)[tf.saved_model.REGRESS_OUTPUTS]
+  ```
+
+  For predict serving, scores can be generated using `PREDICT` signature as
+  follows:
+
+  ```python
+  loaded_model = tf.saved_model.load(path)
+  predictor = loaded_model.signatures[tf.saved_model.PREDICT_METHOD_NAME]
+  scores = predictor(serialized_elwcs)[tf.saved_model.PREDICT_OUTPUTS]
+  ```
+  """
 
   def __init__(self, model: tf.keras.Model,
                context_feature_spec: Dict[str, Union[tf.io.FixedLenFeature,
@@ -58,7 +67,7 @@ class Signatures(tf.Module):
     """Constructor.
 
     Args:
-      model: A keras ranking model.
+      model: A Keras ranking model.
       context_feature_spec: (dict) A mapping from feature keys to
         `FixedLenFeature` or `RaggedFeature` values for context in
         `tensorflow.serving.ExampleListWithContext` proto.
@@ -72,6 +81,29 @@ class Signatures(tf.Module):
     self._context_feature_spec = context_feature_spec
     self._example_feature_spec = example_feature_spec
     self._mask_feature_name = mask_feature_name
+
+  def normalize_outputs(
+      self, default_key: str,
+      outputs: Union[tf.Tensor, Dict[str, tf.Tensor]]) -> Dict[str, tf.Tensor]:
+    """Returns a dict of Tensors for outputs.
+
+    Args:
+      default_key: If outputs is a Tensor, use the default_key to make a dict.
+      outputs: outputs to be normalized.
+
+    Returns:
+      A dict maps from str-like key(s) to Tensor(s).
+
+    Raises:
+      TypeError if outputs is not a Tensor nor a dict.
+    """
+    if isinstance(outputs, tf.Tensor):
+      return {default_key: outputs}
+    elif isinstance(outputs, dict):
+      return outputs
+    else:
+      raise TypeError(
+          "Model outputs need to be either a tensor or a dict of tensors.")
 
   def predict_tf_function(self) -> Callable[[tf.Tensor], Dict[str, tf.Tensor]]:
     """Makes a tensorflow function for `predict`."""
@@ -88,7 +120,7 @@ class Signatures(tf.Module):
           example_feature_spec=self._example_feature_spec,
           mask_feature_name=self._mask_feature_name)
       outputs = self._model(inputs=features, training=False)
-      return _normalize_outputs(tf.saved_model.PREDICT_OUTPUTS, outputs)
+      return self.normalize_outputs(tf.saved_model.PREDICT_OUTPUTS, outputs)
 
     return predict
 
@@ -109,7 +141,7 @@ class Signatures(tf.Module):
       outputs = tf.nest.map_structure(
           functools.partial(tf.squeeze, axis=1),
           self._model(inputs=features, training=False))
-      return _normalize_outputs(tf.saved_model.REGRESS_OUTPUTS, outputs)
+      return self.normalize_outputs(tf.saved_model.REGRESS_OUTPUTS, outputs)
 
     return regress
 

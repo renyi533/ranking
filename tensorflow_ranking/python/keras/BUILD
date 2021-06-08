@@ -21,7 +21,9 @@ py_library(
         ":metrics",
         ":model",
         ":network",
+        ":pipeline",
         ":saved_model",
+        ":strategy_utils",
         ":utils",
         "//tensorflow_ranking/python/keras/canned",
     ],
@@ -121,8 +123,10 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         ":feature",
+        ":layers",
+        # py/absl/logging dep,
         # py/tensorflow dep,
-        "//tensorflow_ranking/python:utils",
+        # py/typing dep,
     ],
 )
 
@@ -142,6 +146,7 @@ py_test(
         ":metrics",
         ":model",
         ":network",
+        # py/absl/testing:parameterized dep,
         # py/tensorflow dep,
         "//tensorflow_ranking/python:data",
         # tensorflow_serving/apis:input_proto_py_pb2 dep,
@@ -198,6 +203,7 @@ py_test(
     deps = [
         ":losses",
         ":utils",
+        # py/absl/testing:parameterized dep,
         # py/tensorflow dep,
     ],
 )
@@ -246,7 +252,6 @@ py_test(
     python_version = "PY3",
     deps = [
         ":layers",
-        # py/absl/testing:parameterized dep,
         # py/tensorflow dep,
     ],
 )
@@ -275,6 +280,57 @@ py_test(
     deps = [
         ":saved_model",
         # py/numpy dep,
+        # py/tensorflow dep,
+        # tensorflow_serving/apis:input_proto_py_pb2 dep,
+    ],
+)
+
+py_library(
+    name = "strategy_utils",
+    srcs = ["strategy_utils.py"],
+    srcs_version = "PY3",
+    deps = [
+        # py/tensorflow dep,
+    ],
+)
+
+py_test(
+    name = "strategy_utils_test",
+    srcs = ["strategy_utils_test.py"],
+    python_version = "PY3",
+    srcs_version = "PY3",
+    deps = [
+        ":strategy_utils",
+        # py/tensorflow dep,
+    ],
+)
+
+py_library(
+    name = "pipeline",
+    srcs = ["pipeline.py"],
+    srcs_version = "PY3",
+    deps = [
+        ":losses",
+        ":metrics",
+        ":model",
+        ":saved_model",
+        ":strategy_utils",
+        # py/dataclasses dep,
+        # py/tensorflow dep,
+        "//tensorflow_ranking/python:data",
+    ],
+)
+
+py_test(
+    name = "pipeline_test",
+    size = "large",
+    srcs = ["pipeline_test.py"],
+    python_version = "PY3",
+    srcs_version = "PY3",
+    deps = [
+        ":model",
+        ":pipeline",
+        # py/absl/testing:parameterized dep,
         # py/tensorflow dep,
         # tensorflow_serving/apis:input_proto_py_pb2 dep,
     ],

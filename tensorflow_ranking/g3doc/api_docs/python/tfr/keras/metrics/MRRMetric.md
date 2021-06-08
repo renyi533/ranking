@@ -1,4 +1,4 @@
-description: Implements mean reciprocal rank (MRR).
+description: Mean reciprocal rank (MRR).
 
 <div itemscope itemtype="http://developers.google.com/ReferenceObject">
 <meta itemprop="name" content="tfr.keras.metrics.MRRMetric" />
@@ -15,7 +15,7 @@ description: Implements mean reciprocal rank (MRR).
 <meta itemprop="property" content="from_config"/>
 <meta itemprop="property" content="get_config"/>
 <meta itemprop="property" content="get_weights"/>
-<meta itemprop="property" content="reset_states"/>
+<meta itemprop="property" content="reset_state"/>
 <meta itemprop="property" content="result"/>
 <meta itemprop="property" content="set_weights"/>
 <meta itemprop="property" content="update_state"/>
@@ -28,14 +28,14 @@ description: Implements mean reciprocal rank (MRR).
 
 <table class="tfo-notebook-buttons tfo-api nocontent" align="left">
 <td>
-  <a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/metrics.py#L167-L180">
+  <a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/metrics.py#L179-L239">
     <img src="https://www.tensorflow.org/images/GitHub-Mark-32px.png" />
     View source on GitHub
   </a>
 </td>
 </table>
 
-Implements mean reciprocal rank (MRR).
+Mean reciprocal rank (MRR).
 
 <pre class="devsite-click-to-copy prettyprint lang-py tfo-signature-link">
 <code>tfr.keras.metrics.MRRMetric(
@@ -44,6 +44,56 @@ Implements mean reciprocal rank (MRR).
 </code></pre>
 
 <!-- Placeholder for "Used in" -->
+
+For each list of scores `s` in `y_pred` and list of labels `y` in `y_true`:
+
+```
+MRR(y, s) = max_i y_i / rank(s_i)
+```
+
+NOTE: This metric converts graded relevance to binary relevance by setting
+`y_i = 1` if `y_i >= 1`.
+
+#### Standalone usage:
+
+```
+>>> y_true = [[0., 1., 1.]]
+>>> y_pred = [[3., 1., 2.]]
+>>> mrr = tfr.keras.metrics.MRRMetric()
+>>> mrr(y_true, y_pred).numpy()
+0.5
+```
+
+```
+>>> # Using ragged tensors
+>>> y_true = tf.ragged.constant([[0., 1.], [1., 2., 0.]])
+>>> y_pred = tf.ragged.constant([[2., 1.], [2., 5., 4.]])
+>>> mrr = tfr.keras.metrics.MRRMetric(ragged=True)
+>>> mrr(y_true, y_pred).numpy()
+0.75
+```
+
+Usage with the `compile()` API:
+
+```python
+model.compile(optimizer='sgd', metrics=[tfr.keras.metrics.MRRMetric()])
+```
+
+#### Definition:
+
+$$
+\text{MRR}(\{y\}, \{s\}) = \max_i \frac{\bar{y}_i}{\text{rank}(s_i)}
+$$
+
+where $$\text{rank}(s_i)$$ is the rank of item $$i$$ after sorting by scores
+$$s$$ with ties broken randomly and $$\bar{y_i}$$ are truncated labels:
+
+$$
+\bar{y}_i = \begin{cases}
+1 & \text{if }y_i \geq 1 \\
+0 & \text{else}
+\end{cases}
+$$
 
 <!-- Tabular view -->
  <table class="responsive fixed orange">
@@ -277,7 +327,6 @@ model.add_loss(lambda: tf.reduce_mean(d.kernel))
 ```
 
 <!-- Tabular view -->
-
  <table class="responsive fixed orange">
 <colgroup><col width="214px"><col></colgroup>
 <tr><th colspan="2">Args</th></tr>
@@ -322,8 +371,8 @@ class MyMetricLayer(tf.keras.layers.Layer):
     self.mean = tf.keras.metrics.Mean(name='metric_1')
 
   def call(self, inputs):
-    self.add_metric(self.mean(x))
-    self.add_metric(tf.reduce_sum(x), name='metric_2')
+    self.add_metric(self.mean(inputs))
+    self.add_metric(tf.reduce_sum(inputs), name='metric_2')
     return inputs
 ```
 
@@ -402,7 +451,6 @@ layer call.
 This is typically used to create the weights of `Layer` subclasses.
 
 <!-- Tabular view -->
-
  <table class="responsive fixed orange">
 <colgroup><col width="214px"><col></colgroup>
 <tr><th colspan="2">Args</th></tr>
@@ -430,7 +478,6 @@ Instance of `TensorShape`, or list of instances of
 Computes an output mask tensor.
 
 <!-- Tabular view -->
-
  <table class="responsive fixed orange">
 <colgroup><col width="214px"><col></colgroup>
 <tr><th colspan="2">Args</th></tr>
@@ -480,7 +527,6 @@ This assumes that the layer will later be used with inputs that match the input
 shape provided here.
 
 <!-- Tabular view -->
-
  <table class="responsive fixed orange">
 <colgroup><col width="214px"><col></colgroup>
 <tr><th colspan="2">Args</th></tr>
@@ -562,7 +608,6 @@ layer from the config dictionary. It does not handle layer connectivity (handled
 by Network), nor weights (handled by `set_weights`).
 
 <!-- Tabular view -->
-
  <table class="responsive fixed orange">
 <colgroup><col width="214px"><col></colgroup>
 <tr><th colspan="2">Args</th></tr>
@@ -592,7 +637,7 @@ A layer instance.
 
 <h3 id="get_config"><code>get_config</code></h3>
 
-<a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/metrics.py#L175-L180">View
+<a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/metrics.py#L234-L239">View
 source</a>
 
 <pre class="devsite-click-to-copy prettyprint lang-py tfo-signature-link">
@@ -607,33 +652,33 @@ Returns the serializable config of the metric.
 <code>get_weights()
 </code></pre>
 
-Returns the current weights of the layer.
+Returns the current weights of the layer, as NumPy arrays.
 
 The weights of a layer represent the state of the layer. This function returns
 both trainable and non-trainable weight values associated with this layer as a
-list of Numpy arrays, which can in turn be used to load state into similarly
+list of NumPy arrays, which can in turn be used to load state into similarly
 parameterized layers.
 
-For example, a Dense layer returns a list of two values-- per-output weights and
-the bias value. These can be used to set the weights of another Dense layer:
+For example, a `Dense` layer returns a list of two values: the kernel matrix and
+the bias vector. These can be used to set the weights of another `Dense` layer:
 
 ```
->>> a = tf.keras.layers.Dense(1,
+>>> layer_a = tf.keras.layers.Dense(1,
 ...   kernel_initializer=tf.constant_initializer(1.))
->>> a_out = a(tf.convert_to_tensor([[1., 2., 3.]]))
->>> a.get_weights()
+>>> a_out = layer_a(tf.convert_to_tensor([[1., 2., 3.]]))
+>>> layer_a.get_weights()
 [array([[1.],
        [1.],
        [1.]], dtype=float32), array([0.], dtype=float32)]
->>> b = tf.keras.layers.Dense(1,
+>>> layer_b = tf.keras.layers.Dense(1,
 ...   kernel_initializer=tf.constant_initializer(2.))
->>> b_out = b(tf.convert_to_tensor([[10., 20., 30.]]))
->>> b.get_weights()
+>>> b_out = layer_b(tf.convert_to_tensor([[10., 20., 30.]]))
+>>> layer_b.get_weights()
 [array([[2.],
        [2.],
        [2.]], dtype=float32), array([0.], dtype=float32)]
->>> b.set_weights(a.get_weights())
->>> b.get_weights()
+>>> layer_b.set_weights(layer_a.get_weights())
+>>> layer_b.get_weights()
 [array([[1.],
        [1.],
        [1.]], dtype=float32), array([0.], dtype=float32)]
@@ -645,16 +690,16 @@ the bias value. These can be used to set the weights of another Dense layer:
 <tr><th colspan="2">Returns</th></tr>
 <tr class="alt">
 <td colspan="2">
-Weights values as a list of numpy arrays.
+Weights values as a list of NumPy arrays.
 </td>
 </tr>
 
 </table>
 
-<h3 id="reset_states"><code>reset_states</code></h3>
+<h3 id="reset_state"><code>reset_state</code></h3>
 
 <pre class="devsite-click-to-copy prettyprint lang-py tfo-signature-link">
-<code>reset_states()
+<code>reset_state()
 </code></pre>
 
 Resets all of the metric state variables.
@@ -681,40 +726,39 @@ value using the state variables.
 )
 </code></pre>
 
-Sets the weights of the layer, from Numpy arrays.
+Sets the weights of the layer, from NumPy arrays.
 
 The weights of a layer represent the state of the layer. This function sets the
 weight values from numpy arrays. The weight values should be passed in the order
 they are created by the layer. Note that the layer's weights must be
-instantiated before calling this function by calling the layer.
+instantiated before calling this function, by calling the layer.
 
-For example, a Dense layer returns a list of two values-- per-output weights and
-the bias value. These can be used to set the weights of another Dense layer:
+For example, a `Dense` layer returns a list of two values: the kernel matrix and
+the bias vector. These can be used to set the weights of another `Dense` layer:
 
 ```
->>> a = tf.keras.layers.Dense(1,
+>>> layer_a = tf.keras.layers.Dense(1,
 ...   kernel_initializer=tf.constant_initializer(1.))
->>> a_out = a(tf.convert_to_tensor([[1., 2., 3.]]))
->>> a.get_weights()
+>>> a_out = layer_a(tf.convert_to_tensor([[1., 2., 3.]]))
+>>> layer_a.get_weights()
 [array([[1.],
        [1.],
        [1.]], dtype=float32), array([0.], dtype=float32)]
->>> b = tf.keras.layers.Dense(1,
+>>> layer_b = tf.keras.layers.Dense(1,
 ...   kernel_initializer=tf.constant_initializer(2.))
->>> b_out = b(tf.convert_to_tensor([[10., 20., 30.]]))
->>> b.get_weights()
+>>> b_out = layer_b(tf.convert_to_tensor([[10., 20., 30.]]))
+>>> layer_b.get_weights()
 [array([[2.],
        [2.],
        [2.]], dtype=float32), array([0.], dtype=float32)]
->>> b.set_weights(a.get_weights())
->>> b.get_weights()
+>>> layer_b.set_weights(layer_a.get_weights())
+>>> layer_b.get_weights()
 [array([[1.],
        [1.],
        [1.]], dtype=float32), array([0.], dtype=float32)]
 ```
 
 <!-- Tabular view -->
-
  <table class="responsive fixed orange">
 <colgroup><col width="214px"><col></colgroup>
 <tr><th colspan="2">Args</th></tr>
@@ -724,7 +768,7 @@ the bias value. These can be used to set the weights of another Dense layer:
 `weights`
 </td>
 <td>
-a list of Numpy arrays. The number
+a list of NumPy arrays. The number
 of arrays and their shape must match
 number of the dimensions of the weights
 of the layer (i.e. it should match the
@@ -751,7 +795,7 @@ layer's specifications.
 
 <h3 id="update_state"><code>update_state</code></h3>
 
-<a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/metrics.py#L141-L163">View
+<a target="_blank" href="https://github.com/tensorflow/ranking/tree/master/tensorflow_ranking/python/keras/metrics.py#L153-L175">View
 source</a>
 
 <pre class="devsite-click-to-copy prettyprint lang-py tfo-signature-link">

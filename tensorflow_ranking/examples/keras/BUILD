@@ -35,6 +35,35 @@ py_test(
         ":antique_kpl_din",
         # py/absl/testing:flagsaver dep,
         # py/tensorflow dep,
+        "//tensorflow_ranking",
+        # tensorflow_serving/apis:input_proto_py_pb2 dep,
+    ],
+)
+
+py_binary(
+    name = "antique_ragged",
+    srcs = ["antique_ragged.py"],
+    python_version = "PY3",
+    srcs_version = "PY3",
+    deps = [
+        # py/absl:app dep,
+        # py/absl/flags dep,
+        # py/absl/logging dep,
+        # py/tensorflow dep,
+        "//tensorflow_ranking",
+    ],
+)
+
+py_test(
+    name = "antique_ragged_test",
+    srcs = ["antique_ragged_test.py"],
+    python_version = "PY3",
+    srcs_version = "PY3",
+    deps = [
+        ":antique_ragged",
+        # py/absl/testing:flagsaver dep,
+        # py/absl/testing:parameterized dep,
+        # py/tensorflow dep,
         # tensorflow_serving/apis:input_proto_py_pb2 dep,
     ],
 )
@@ -116,6 +145,33 @@ py_test(
         ":keras_m2e_gam_tfrecord_lib",
         # py/absl/flags dep,
         # py/absl/testing:flagsaver dep,
+        # py/tensorflow dep,
+        # tensorflow_serving/apis:input_proto_py_pb2 dep,
+    ],
+)
+
+py_binary(
+    name = "keras_dnn_tfrecord",
+    srcs = ["keras_dnn_tfrecord.py"],
+    python_version = "PY3",
+    srcs_version = "PY3",
+    deps = [
+        # py/absl:app dep,
+        # py/absl/flags dep,
+        # py/tensorflow dep,
+        "//tensorflow_ranking",
+    ],
+)
+
+py_test(
+    name = "keras_dnn_tfrecord_test",
+    srcs = ["keras_dnn_tfrecord_test.py"],
+    python_version = "PY3",
+    srcs_version = "PY3",
+    deps = [
+        ":keras_dnn_tfrecord",
+        # py/absl/testing:flagsaver dep,
+        # py/absl/testing:parameterized dep,
         # py/tensorflow dep,
         # tensorflow_serving/apis:input_proto_py_pb2 dep,
     ],
